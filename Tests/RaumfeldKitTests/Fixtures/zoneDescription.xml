@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<root xmlns="urn:schemas-upnp-org:device-1-0">
+  <specVersion><major>1</major><minor>0</minor></specVersion>
+  <device>
+    <deviceType>urn:schemas-upnp-org:device:MediaRenderer:1</deviceType>
+    <friendlyName>Kitchen &amp; Living Room</friendlyName>
+    <UDN>uuid:zone-1</UDN>
+    <serviceList>
+      <service>
+        <serviceType>urn:schemas-upnp-org:service:RenderingControl:1</serviceType>
+        <serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
+        <controlURL>/zone-1/RenderingControl/control</controlURL>
+        <eventSubURL>/zone-1/RenderingControl/event</eventSubURL>
+        <SCPDURL>/zone-1/RenderingControl.xml</SCPDURL>
+      </service>
+      <service>
+        <serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
+        <serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
+        <controlURL>zone-1/AVTransport/control</controlURL>
+        <eventSubURL>/zone-1/AVTransport/event</eventSubURL>
+        <SCPDURL>/zone-1/AVTransport.xml</SCPDURL>
+      </service>
+    </serviceList>
+  </device>
+</root>

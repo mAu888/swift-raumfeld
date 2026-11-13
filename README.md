@@ -1,5 +1,145 @@
+# swift-raumfeld
+
+Control Teufel Raumfeld speakers from Swift, plus an iOS app with Siri and Shortcuts support.
+
+This is a Swift port of [PyRaumfeld](https://github.com/maierp/pyraumfeld). The original
+Python library is still here (see [PyRaumfeld](#pyraumfeld-05) below) as a reference.
+
+| Part | What it is |
+|---|---|
+| `Sources/RaumfeldKit` | Swift package with no dependencies: zones, rooms, speakers, volume, mute, playback, grouping, media server, live updates |
+| `Sources/raumfeld-cli` | `raumfeld` command-line tool for trying the library against your system |
+| `App/` | iOS 17 app *Raumfeld Remote*: room list with volume sliders, App Intents, Siri phrases |
+
+## RaumfeldKit
+
+```swift
+import RaumfeldKit
+
+let raumfeld = RaumfeldClient(host: "192.168.1.20")   // or: try await RaumfeldClient.discover()
+let topology = try await raumfeld.fetchTopology()
+
+let kitchen = try raumfeld.room(named: "Kitchen", in: topology)
+try await kitchen.setVolume(30)            // this room only
+try await kitchen.adjustVolume(by: -5)
+try await kitchen.setMuted(true)
+try await kitchen.togglePlayPause()        // the room's whole zone
+print(try await kitchen.nowPlaying().summary ?? "–")
+
+if let zone = kitchen.zone {
+    try await raumfeld.controller(for: zone).setVolume(40)   // all rooms of the zone
+}
+
+// Group rooms
+try await raumfeld.connect(room: bathroom.udn, toZone: zone.udn)
+try await raumfeld.drop(room: bathroom.udn)
+
+// Follow changes (rooms grouped, speakers switched on or off, …)
+for await topology in raumfeld.topologyUpdates() {
+    print(topology.zones.map(\.displayName))
+}
+```
+
+Add it to an Xcode project or `Package.swift` as a Swift package: iOS 16+, macOS 13+, and Linux.
+
+### How it talks to Raumfeld
+
+* **Host web service** (port `47365`): `getZones` and `listDevices` give the
+  structure. Both support long polling with an `updateID` header, which
+  `topologyUpdates()` uses. `connectRoomToZone` and `dropRoomJob` group and ungroup rooms.
+* **UPnP SOAP** on each renderer:
+  * RenderingControl for volume and mute
+  * AVTransport for playback
+  * ContentDirectory on the media server for browsing and queues
+
+  Control URLs are read from each device's description. If that fails, the paths
+  the Python library hardcoded are used.
+* **Room volume**: for a room in a zone, the zone's virtual renderer is asked
+  using the Raumfeld `SetRoomVolume` / `GetRoomVolume` actions. If it answers
+  with a SOAP fault, the room's speaker is controlled directly instead, as the
+  Python library always did.
+* **Discovery**: SSDP M-SEARCH for `urn:schemas-raumfeld-com:device:ConfigDevice:1`.
+  On iOS this needs Apple's multicast entitlement (see below).
+
+### Command-line tool
+
+```sh
+swift run raumfeld --host 192.168.1.20 rooms
+swift run raumfeld --host 192.168.1.20 volume Kitchen 30
+swift run raumfeld --host 192.168.1.20 volume Kitchen +5
+swift run raumfeld --host 192.168.1.20 toggle Kitchen
+swift run raumfeld --host 192.168.1.20 now Kitchen
+swift run raumfeld --host 192.168.1.20 watch
+```
+
+Run `swift run raumfeld` for all commands. `RAUMFELD_HOST=…` works instead of `--host`.
+Without either, the host is discovered via SSDP.
+
+### Tests
+
+```sh
+swift test
+```
+
+The tests use XML fixtures and a mock transport. No speakers are needed.
+
+## iOS app: Raumfeld Remote
+
+The project is generated with [XcodeGen](https://github.com/yonaskolb/XcodeGen):
+
+```sh
+brew install xcodegen
+cd App
+xcodegen
+open RaumfeldRemote.xcodeproj
+```
+
+Set your team and bundle ID in `App/project.yml` (or in Xcode), then run it on your
+iPhone. Enter the IP address of your Raumfeld host in the settings. Allow local
+network access when iOS asks.
+
+### Siri and Shortcuts
+
+The app offers these App Intents. They show up as actions in the Shortcuts app,
+and through `AppShortcutsProvider` they work in Siri without any setup:
+
+| Intent | Example Siri phrase |
+|---|---|
+| Change Volume (up/down, step) | "Turn up Kitchen with Raumfeld Remote" |
+| Set Volume (0–100) | "Set the volume in Kitchen with Raumfeld Remote" |
+| Get Volume (returns a number) | Shortcuts only |
+| Mute or Unmute | "Mute Kitchen with Raumfeld Remote" |
+| Control Playback (play, pause, toggle, stop, next, previous) | "Pause Kitchen with Raumfeld Remote", "Skip Raumfeld Remote" |
+| What's Playing | "What's playing in Kitchen on Raumfeld Remote" |
+| Group Rooms / Ungroup Room | Shortcuts only |
+
+Siri learns your room names from the app. They are refreshed whenever the app
+sees the rooms change.
+
+### Limitations
+
+* **Local network only.** The Raumfeld system has no cloud API, so Siri and
+  Shortcuts only work while the iPhone is on your home network.
+* **Automatic discovery** needs the `com.apple.developer.networking.multicast`
+  entitlement, which you [request from Apple](https://developer.apple.com/contact/request/networking-multicast).
+  Until it is granted, enter the host's IP address manually. A fixed DHCP lease
+  for the host in your router helps. When you have the entitlement, enable the
+  commented-out `entitlements` block in `project.yml`.
+* **No hardware volume buttons.** iOS only lets the volume buttons control AirPlay
+  devices. Use Siri, Shortcuts, Back Tap, or the Action Button instead.
+
+### Ideas for next steps
+
+* A Control Center / Lock Screen volume control (iOS 18 `ControlWidget`) and
+  interactive widgets. Both need an App Group so the extension can read the host
+  setting (see `AppSettings`).
+* A Live Activity for now playing.
+* Browsing the media server (`ContentDirectory`) to start favourites or radio stations.
+
+---
+
 PyRaumfeld 0.5
-========
+==============
 
 Python library for controlling the Teufel Raumfeld system
 

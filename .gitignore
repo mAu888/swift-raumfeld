@@ -3,3 +3,11 @@
 .project
 .settings
 .venv
+# Swift
+.build/
+.swiftpm/
+*.xcodeproj/xcuserdata/
+xcuserdata/
+DerivedData/
+App/*.xcodeproj
+App/RaumfeldRemote/Info.plist

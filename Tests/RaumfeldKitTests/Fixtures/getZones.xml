@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<zoneConfig numRooms="4" spotifyMode="multi">
+  <zones>
+    <zone udn="uuid:zone-1">
+      <room udn="uuid:room-kitchen" name="Kitchen" powerState="ACTIVE" color="4294967295">
+        <renderer udn="uuid:renderer-kitchen" name="Speaker M"/>
+      </room>
+      <room udn="uuid:room-living" name="Living Room" powerState="ACTIVE">
+        <renderer udn="uuid:renderer-living-left" name="Stereo M Left"/>
+        <renderer udn="uuid:renderer-living-right" name="Stereo M Right"/>
+      </room>
+    </zone>
+    <zone udn="uuid:zone-2">
+      <room udn="uuid:room-office" name="Büro" powerState="MANUAL_STANDBY">
+        <renderer udn="uuid:renderer-office" name="One M"/>
+      </room>
+    </zone>
+  </zones>
+  <unassignedRooms>
+    <room udn="uuid:room-bath" name="Bathroom" powerState="AUTOMATIC_STANDBY">
+      <renderer udn="uuid:renderer-bath" name="Cube"/>
+    </room>
+  </unassignedRooms>
+</zoneConfig>

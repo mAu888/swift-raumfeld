@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<devices>
+  <device location="http://192.168.1.20:47365/zone-1.xml" udn="uuid:zone-1" type="urn:schemas-upnp-org:device:MediaRenderer:1">Kitchen &amp; Living Room</device>
+  <device location="http://192.168.1.20:47365/zone-2.xml" udn="uuid:zone-2" type="urn:schemas-upnp-org:device:MediaRenderer:1">Büro</device>
+  <device location="http://192.168.1.31:52240/description.xml" udn="uuid:renderer-kitchen" type="urn:schemas-upnp-org:device:MediaRenderer:1">Speaker M</device>
+  <device location="http://192.168.1.32:52240/description.xml" udn="uuid:renderer-living-left" type="urn:schemas-upnp-org:device:MediaRenderer:1">Stereo M Left</device>
+  <device location="http://192.168.1.33:52240/description.xml" udn="uuid:renderer-living-right" type="urn:schemas-upnp-org:device:MediaRenderer:1">Stereo M Right</device>
+  <device location="http://192.168.1.34:52240/description.xml" udn="uuid:renderer-office" type="urn:schemas-upnp-org:device:MediaRenderer:1">One M</device>
+  <device location="http://192.168.1.35:52240/description.xml" udn="uuid:renderer-bath" type="urn:schemas-upnp-org:device:MediaRenderer:1">Cube</device>
+  <device location="http://192.168.1.20:52203/ms.xml" udn="uuid:mediaserver" type="urn:schemas-upnp-org:device:MediaServer:1">Raumfeld MediaServer</device>
+</devices>
