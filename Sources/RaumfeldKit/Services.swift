@@ -66,18 +66,23 @@ public struct RenderingControl: Sendable {
     }
 
     static func int(_ value: String?, action: String) throws -> Int {
-        guard let value, let number = Int(value.trimmingCharacters(in: .whitespaces)) else {
+        guard let number = parseInt(value) else {
             throw RaumfeldError.invalidResponse("\(action) returned \(value ?? "nothing")")
         }
         return number
     }
 
     static func bool(_ value: String?) -> Bool {
-        switch value?.trimmingCharacters(in: .whitespaces).lowercased() {
+        switch value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "1", "true", "yes": return true
         default: return false
         }
     }
+}
+
+/// Parses an integer from SOAP text, ignoring surrounding whitespace and newlines.
+func parseInt(_ value: String?) -> Int? {
+    value.flatMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
 }
 
 func clampVolume(_ volume: Int) -> Int {
@@ -94,7 +99,7 @@ public enum TransportState: String, Sendable {
     case unknown
 
     public init(upnp value: String) {
-        self = TransportState(rawValue: value.trimmingCharacters(in: .whitespaces)) ?? .unknown
+        self = TransportState(rawValue: value.trimmingCharacters(in: .whitespacesAndNewlines)) ?? .unknown
     }
 
     public var isPlaying: Bool {
@@ -184,7 +189,7 @@ public struct AVTransport: Sendable {
     public func positionInfo() async throws -> PositionInfo {
         let result = try await soap.call("GetPositionInfo", [("InstanceID", instanceID)])
         return PositionInfo(
-            track: result["Track"].flatMap { Int($0) },
+            track: parseInt(result["Track"]),
             trackDuration: result["TrackDuration"] ?? "",
             relativeTime: result["RelTime"] ?? "",
             trackURI: result["TrackURI"] ?? "",
@@ -195,7 +200,7 @@ public struct AVTransport: Sendable {
     public func mediaInfo() async throws -> MediaInfo {
         let result = try await soap.call("GetMediaInfo", [("InstanceID", instanceID)])
         return MediaInfo(
-            numberOfTracks: result["NrTracks"].flatMap { Int($0) },
+            numberOfTracks: parseInt(result["NrTracks"]),
             currentURI: result["CurrentURI"] ?? "",
             metadata: result["CurrentURIMetaData"].flatMap(TrackMetadata.init(didl:))
         )
@@ -296,8 +301,8 @@ public struct ContentDirectory: Sendable {
     static func browseResult(_ result: [String: String]) -> BrowseResult {
         BrowseResult(
             didl: result["Result"] ?? "",
-            numberReturned: result["NumberReturned"].flatMap { Int($0) } ?? 0,
-            totalMatches: result["TotalMatches"].flatMap { Int($0) } ?? 0
+            numberReturned: parseInt(result["NumberReturned"]) ?? 0,
+            totalMatches: parseInt(result["TotalMatches"]) ?? 0
         )
     }
 }

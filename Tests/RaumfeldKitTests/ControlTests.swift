@@ -172,6 +172,13 @@ final class ControlTests: XCTestCase {
                 try await Task.sleep(nanoseconds: 60_000_000_000)
             }
             if request.url.path.hasSuffix("/getZones") {
+                if n == 2 {
+                    // Like a real long poll, report the change only after the
+                    // client has seen the first state.
+                    while await calls.value("consumed") == 0 {
+                        try await Task.sleep(nanoseconds: 5_000_000)
+                    }
+                }
                 // Second response: the bathroom joined zone 2.
                 let xml = n == 1
                     ? Fixture.data("getZones")
@@ -188,6 +195,7 @@ final class ControlTests: XCTestCase {
         var snapshots: [Topology] = []
         for await topology in client.topologyUpdates() {
             snapshots.append(topology)
+            _ = await calls.increment("consumed")
             if snapshots.count == 2 { break }
         }
         XCTAssertEqual(snapshots[0].unassignedRooms.count, 1)
@@ -205,5 +213,9 @@ actor Counter {
     func increment(_ key: String) -> Int {
         counts[key, default: 0] += 1
         return counts[key]!
+    }
+
+    func value(_ key: String) -> Int {
+        counts[key, default: 0]
     }
 }

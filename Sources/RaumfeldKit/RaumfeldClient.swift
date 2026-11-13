@@ -26,15 +26,26 @@ public final class RaumfeldClient: Sendable {
     /// How long the host may hold a long-poll request before answering.
     public var longPollTimeout: TimeInterval { 900 }
 
-    public init(baseURL: URL, transport: any HTTPTransport = URLSessionTransport()) {
+    /// Pause between long-poll requests that brought no usable change: the host
+    /// answered 304 without blocking, or sent no `updateID` (so it cannot block
+    /// on the next request). Keeps a misbehaving host or proxy from being
+    /// hammered in a tight loop.
+    let idlePollInterval: TimeInterval
+
+    public convenience init(baseURL: URL, transport: any HTTPTransport = URLSessionTransport.shared) {
+        self.init(baseURL: baseURL, transport: transport, idlePollInterval: 5)
+    }
+
+    init(baseURL: URL, transport: any HTTPTransport, idlePollInterval: TimeInterval) {
         self.baseURL = baseURL
         self.transport = transport
+        self.idlePollInterval = idlePollInterval
         self.resolver = ServiceResolver(transport: transport)
         self.sessionID = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
     }
 
     /// Creates a client for the host at `host` (an IP address or host name).
-    public convenience init(host: String, port: Int = RaumfeldClient.defaultPort, transport: any HTTPTransport = URLSessionTransport()) {
+    public convenience init(host: String, port: Int = RaumfeldClient.defaultPort, transport: any HTTPTransport = URLSessionTransport.shared) {
         var components = URLComponents()
         components.scheme = "http"
         components.host = host
@@ -48,7 +59,7 @@ public final class RaumfeldClient: Sendable {
     ///
     /// - Note: On iOS this needs the `com.apple.developer.networking.multicast`
     ///   entitlement. Without it, ask the user for the host's IP address instead.
-    public static func discover(timeout: TimeInterval = 3, transport: any HTTPTransport = URLSessionTransport()) async throws -> RaumfeldClient {
+    public static func discover(timeout: TimeInterval = 3, transport: any HTTPTransport = URLSessionTransport.shared) async throws -> RaumfeldClient {
         guard let host = try await SSDPDiscovery.findHost(timeout: timeout) else {
             throw RaumfeldError.hostNotFound
         }
@@ -127,11 +138,21 @@ public final class RaumfeldClient: Sendable {
             do {
                 let response = try await get(endpoint, updateID: updateID, longPoll: true)
                 failures = 0
-                if response.statusCode == 304 { continue }
+                if response.statusCode == 304 {
+                    // "No change". A host that blocks first is fine; one that
+                    // answers immediately must not be asked again right away.
+                    try await Task.sleep(nanoseconds: UInt64(idlePollInterval * 1_000_000_000))
+                    continue
+                }
                 sink.yield(try parse(response.data))
                 updateID = response.updateID
+                if updateID == nil {
+                    // Without an updateID the next request cannot block, so fall
+                    // back to plain polling.
+                    try await Task.sleep(nanoseconds: UInt64(idlePollInterval * 1_000_000_000))
+                }
             } catch {
-                if Task.isCancelled { return }
+                if Task.isCancelled || error is CancellationError { return }
                 // Timeouts are expected for idle long polls; start over with a fresh state.
                 updateID = nil
                 failures += 1
@@ -208,17 +229,19 @@ public final class RaumfeldClient: Sendable {
         return controller(for: room, in: topology)
     }
 
-    public func renderingControl(at location: URL) async -> RenderingControl {
-        RenderingControl(soap: await resolver.service(.renderingControl, at: location))
+    /// RenderingControl of the device at `location`. `kind` selects the fallback
+    /// control path used if the device description cannot be fetched.
+    public func renderingControl(at location: URL, kind: DeviceKind = .renderer) async -> RenderingControl {
+        RenderingControl(soap: await resolver.service(.renderingControl, at: location, kind: kind))
     }
 
-    public func avTransport(at location: URL) async -> AVTransport {
-        AVTransport(soap: await resolver.service(.avTransport, at: location))
+    public func avTransport(at location: URL, kind: DeviceKind = .renderer) async -> AVTransport {
+        AVTransport(soap: await resolver.service(.avTransport, at: location, kind: kind))
     }
 
     /// The media server's ContentDirectory (browse, search and queues).
     public func contentDirectory(in topology: Topology) async throws -> ContentDirectory {
         guard let server = topology.mediaServer else { throw RaumfeldError.notFound("Raumfeld MediaServer") }
-        return ContentDirectory(soap: await resolver.service(.contentDirectory, at: server.location))
+        return ContentDirectory(soap: await resolver.service(.contentDirectory, at: server.location, kind: .mediaServer))
     }
 }

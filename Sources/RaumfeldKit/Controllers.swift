@@ -93,7 +93,7 @@ public struct RoomController: Sendable {
     ) async throws -> T {
         if let zoneLocation = zone?.location {
             do {
-                return try await zoneOperation(await client.renderingControl(at: zoneLocation))
+                return try await zoneOperation(await client.renderingControl(at: zoneLocation, kind: .zone))
             } catch RaumfeldError.soapFault where firstRendererLocation != nil {
                 // Fall through to the physical renderer.
             }
@@ -112,10 +112,13 @@ public struct RoomController: Sendable {
 
     /// The AVTransport of the room's zone, or of its own speaker if unassigned.
     public func transport() async throws -> AVTransport {
-        guard let location = zone?.location ?? firstRendererLocation else {
+        if let zoneLocation = zone?.location {
+            return await client.avTransport(at: zoneLocation, kind: .zone)
+        }
+        guard let location = firstRendererLocation else {
             throw RaumfeldError.notFound("A renderer for room \"\(room.name)\"")
         }
-        return await client.avTransport(at: location)
+        return await client.avTransport(at: location, kind: .renderer)
     }
 
     public func play() async throws { try await transport().play() }
@@ -151,11 +154,11 @@ public struct ZoneController: Sendable {
     }
 
     public func renderingControl() async throws -> RenderingControl {
-        await client.renderingControl(at: try location())
+        await client.renderingControl(at: try location(), kind: .zone)
     }
 
     public func transport() async throws -> AVTransport {
-        await client.avTransport(at: try location())
+        await client.avTransport(at: try location(), kind: .zone)
     }
 
     /// Zone volume, 0–100. Changing it scales all rooms of the zone proportionally.

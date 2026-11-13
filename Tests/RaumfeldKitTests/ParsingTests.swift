@@ -82,7 +82,7 @@ final class ParsingTests: XCTestCase {
     }
 
     func testFallbackControlURL() {
-        let url = ServiceResolver.fallbackURL(for: .renderingControl, location: URL(string: "http://10.0.0.5:52240/description.xml")!)
+        let url = ServiceResolver.fallbackURL(for: .renderingControl, kind: .renderer, location: URL(string: "http://10.0.0.5:52240/description.xml")!)
         XCTAssertEqual(url, URL(string: "http://10.0.0.5:52240/RenderingControl/ctrl"))
     }
 

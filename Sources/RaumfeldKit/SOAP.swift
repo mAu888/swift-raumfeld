@@ -11,15 +11,28 @@ public enum UPnPService: String, Sendable, CaseIterable {
     case connectionManager = "urn:schemas-upnp-org:service:ConnectionManager:1"
 
     /// Control path used when the device description cannot be fetched.
-    /// These are the paths the original Python library hardcoded.
-    var fallbackControlPath: String {
-        switch self {
-        case .renderingControl: return "/RenderingControl/ctrl"
-        case .avTransport: return "/AVTransport/ctrl"
-        case .contentDirectory: return "/cd/Control"
-        case .connectionManager: return "/ConnectionManager/ctrl"
+    /// These are the paths the original Python library hardcoded, which differ
+    /// between a zone's virtual renderer and a physical speaker.
+    func fallbackControlPath(for kind: DeviceKind) -> String {
+        switch (self, kind) {
+        case (.renderingControl, .zone): return "/RenderingService/Control"
+        case (.avTransport, .zone): return "/TransportService/Control"
+        case (.renderingControl, _): return "/RenderingControl/ctrl"
+        case (.avTransport, _): return "/AVTransport/ctrl"
+        case (.contentDirectory, _): return "/cd/Control"
+        case (.connectionManager, _): return "/ConnectionManager/ctrl"
         }
     }
+}
+
+/// The kind of UPnP device, which determines the fallback control paths.
+public enum DeviceKind: Sendable, Hashable {
+    /// A physical speaker.
+    case renderer
+    /// A zone's virtual renderer, served by the Raumfeld host.
+    case zone
+    /// The Raumfeld media server.
+    case mediaServer
 }
 
 /// Builds and parses UPnP SOAP messages.
@@ -39,6 +52,7 @@ enum SOAP {
     static func request(controlURL: URL, service: String, action: String, arguments: [(String, String)]) -> URLRequest {
         var request = URLRequest(url: controlURL)
         request.httpMethod = "POST"
+        request.timeoutInterval = 10
         request.setValue("text/xml; charset=\"utf-8\"", forHTTPHeaderField: "Content-Type")
         request.setValue("\"\(service)#\(action)\"", forHTTPHeaderField: "SOAPAction")
         request.httpBody = Data(envelope(service: service, action: action, arguments: arguments).utf8)

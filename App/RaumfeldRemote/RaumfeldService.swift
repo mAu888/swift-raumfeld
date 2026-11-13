@@ -41,6 +41,8 @@ actor RaumfeldService {
     private var topology: Topology?
     private var topologyDate: Date?
 
+    /// The client for the configured host. The app UI uses the same instance,
+    /// so both share one cache of device descriptions.
     func currentClient() throws -> RaumfeldClient {
         guard let host = AppSettings.host else { throw RemoteError.notConfigured }
         if let client, clientHost == host { return client }
@@ -58,12 +60,15 @@ actor RaumfeldService {
             return topology
         }
         let fresh = try await client.fetchTopology()
-        store(fresh)
+        store(fresh, from: client)
         return fresh
     }
 
     /// Called by the app's long-poll loop so intents can reuse the latest state.
-    func store(_ topology: Topology) {
+    /// Ignored if `client` is no longer the current one (the host was changed
+    /// while its request was in flight).
+    func store(_ topology: Topology, from client: RaumfeldClient) {
+        guard let current = self.client, current === client else { return }
         self.topology = topology
         self.topologyDate = Date()
     }

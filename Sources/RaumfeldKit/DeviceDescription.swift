@@ -31,49 +31,76 @@ struct DeviceDescription: Sendable, Equatable {
 }
 
 /// Fetches and caches device descriptions so each device is only asked once.
+///
+/// Concurrent lookups for the same device share one request. Failed lookups are
+/// remembered for `failureTTL` seconds, so a device that does not serve its
+/// description does not delay every command with another failing request.
 actor ServiceResolver {
-    private let transport: any HTTPTransport
-    private var cache: [URL: DeviceDescription] = [:]
+    private enum Entry {
+        case loaded(DeviceDescription)
+        case failed(at: Date)
+        case loading(Task<DeviceDescription?, Never>)
+    }
 
-    init(transport: any HTTPTransport) {
+    private let transport: any HTTPTransport
+    private let failureTTL: TimeInterval
+    private var entries: [URL: Entry] = [:]
+
+    init(transport: any HTTPTransport, failureTTL: TimeInterval = 60) {
         self.transport = transport
+        self.failureTTL = failureTTL
     }
 
     /// Returns a SOAP client for `service` on the device described at `location`.
     ///
     /// If the description cannot be fetched or does not list the service, the
-    /// conventional Raumfeld control path is used instead, matching the
-    /// behaviour of the original Python library.
-    func service(_ service: UPnPService, at location: URL) async -> SOAPService {
+    /// control path the original Python library hardcoded for that kind of
+    /// device is used instead.
+    func service(_ service: UPnPService, at location: URL, kind: DeviceKind) async -> SOAPService {
         let description = await description(at: location)
         let controlURL = description?.controlURLs[service.rawValue]
-            ?? Self.fallbackURL(for: service, location: location)
+            ?? Self.fallbackURL(for: service, kind: kind, location: location)
         return SOAPService(controlURL: controlURL, serviceType: service.rawValue, transport: transport)
     }
 
     func invalidate() {
-        cache.removeAll()
+        entries.removeAll()
     }
 
     private func description(at location: URL) async -> DeviceDescription? {
-        if let cached = cache[location] { return cached }
-        var request = URLRequest(url: location)
-        request.timeoutInterval = 5
-        guard
-            let (data, response) = try? await transport.send(request),
-            (200..<300).contains(response.statusCode),
-            let description = try? DeviceDescription.parse(data, location: location)
-        else { return nil }
-        cache[location] = description
+        switch entries[location] {
+        case let .loaded(description):
+            return description
+        case let .failed(date) where Date().timeIntervalSince(date) < failureTTL:
+            return nil
+        case let .loading(task):
+            return await task.value
+        case .failed, nil:
+            break
+        }
+
+        let transport = self.transport
+        let task = Task<DeviceDescription?, Never> {
+            var request = URLRequest(url: location)
+            request.timeoutInterval = 5
+            guard
+                let (data, response) = try? await transport.send(request),
+                (200..<300).contains(response.statusCode)
+            else { return nil }
+            return try? DeviceDescription.parse(data, location: location)
+        }
+        entries[location] = .loading(task)
+        let description = await task.value
+        entries[location] = description.map(Entry.loaded) ?? .failed(at: Date())
         return description
     }
 
-    static func fallbackURL(for service: UPnPService, location: URL) -> URL {
+    static func fallbackURL(for service: UPnPService, kind: DeviceKind, location: URL) -> URL {
         var components = URLComponents()
         components.scheme = location.scheme
         components.host = location.host
         components.port = location.port
-        components.path = service.fallbackControlPath
+        components.path = service.fallbackControlPath(for: kind)
         return components.url ?? location
     }
 }
